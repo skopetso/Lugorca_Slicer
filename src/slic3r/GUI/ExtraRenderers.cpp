@@ -1,9 +1,11 @@
 #include "ExtraRenderers.hpp"
 #include "wxExtensions.hpp"
 #include "GUI.hpp"
+#include "GUI_App.hpp"
 #include "BitmapComboBox.hpp"
 #include "Plater.hpp"
 #include "Widgets/ComboBox.hpp"
+#include "libslic3r/PresetBundle.hpp"
 
 #include <wx/dc.h>
 #ifdef wxHAS_GENERIC_DATAVIEWCTRL
@@ -312,16 +314,29 @@ wxWindow* BitmapChoiceRenderer::CreateEditorCtrl(wxWindow* parent, wxRect labelR
     DataViewBitmapText data;
     data << value;
 
+    // LUGOWARE: show filament names in the popup (remove CB_NO_TEXT)
     ::ComboBox *c_editor = new ::ComboBox(parent, wxID_ANY, wxEmptyString,
         labelRect.GetTopLeft(), wxSize(labelRect.GetWidth(), -1),
-        0, nullptr, wxCB_READONLY | CB_NO_DROP_ICON | CB_NO_TEXT);
+        0, nullptr, wxCB_READONLY | CB_NO_DROP_ICON);
     c_editor->GetDropDown().SetUseContentWidth(true);
 
     if (has_default_extruder && has_default_extruder())
         c_editor->Append(_L("default"), *get_default_extruder_color_icon());
 
-    for (size_t i = 0; i < icons.size(); i++)
-        c_editor->Append(wxString::Format("%d", i+1), *icons[i]);
+    // LUGOWARE: "N  Preset name" as label
+    auto *pb = Slic3r::GUI::wxGetApp().preset_bundle;
+    const size_t physical_cnt = pb ? pb->filament_presets.size() : 0;
+    for (size_t i = 0; i < icons.size(); i++) {
+        wxString label;
+        if (pb && i < physical_cnt) {
+            auto preset = pb->filaments.find_preset(pb->filament_presets[i]);
+            label = preset ? wxString::Format("%zu  %s", i + 1, wxString::FromUTF8(preset->label(false)))
+                           : wxString::Format("%zu", i + 1);
+        } else {
+            label = wxString::Format("%zu", i + 1);
+        }
+        c_editor->Append(label, *icons[i]);
+    }
 
     if (has_default_extruder && has_default_extruder())
         c_editor->SetSelection(atoi(data.GetText().c_str()));
