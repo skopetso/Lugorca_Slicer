@@ -9142,6 +9142,19 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
 
     auto idx = combo->get_filament_idx();
 
+    // LUGOWARE: 프린터 변경 시 컬러페인팅(mmu_segmentation_facets) 유지
+    // 원본 코드는 프린터/필라멘트 개수 변경 과정에서 페인팅 데이터가 날아감.
+    // FacetsAnnotation은 operator=이 private이라 m_data(TriangleSplittingData)로 백업.
+    std::map<ObjectID, TriangleSelector::TriangleSplittingData> lugoware_mmu_backup;
+    if (preset_type == Preset::TYPE_PRINTER) {
+        for (ModelObject *mo : model.objects) {
+            for (ModelVolume *mv : mo->volumes) {
+                if (!mv->mmu_segmentation_facets.empty())
+                    lugoware_mmu_backup[mv->id()] = mv->mmu_segmentation_facets.get_data();
+            }
+        }
+    }
+
     // BBS:Save the plate parameters before switching
     PartPlateList& old_plate_list = this->partplate_list;
     PartPlate* old_plate = old_plate_list.get_selected_plate();
@@ -9304,6 +9317,20 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
     auto plate_list = partplate_list.get_plate_list();
     for (auto plate : plate_list) {
          plate->update_slice_result_valid_state(false);
+    }
+
+    // LUGOWARE: 프린터 변경 후 컬러페인팅 복원
+    if (preset_type == Preset::TYPE_PRINTER && !lugoware_mmu_backup.empty()) {
+        for (ModelObject *mo : model.objects) {
+            for (ModelVolume *mv : mo->volumes) {
+                auto it = lugoware_mmu_backup.find(mv->id());
+                if (it != lugoware_mmu_backup.end()) {
+                    TriangleSelector selector(mv->mesh());
+                    selector.deserialize(it->second, false);
+                    mv->mmu_segmentation_facets.set(selector);
+                }
+            }
+        }
     }
 }
 
