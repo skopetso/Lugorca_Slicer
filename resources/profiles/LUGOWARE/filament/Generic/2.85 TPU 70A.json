@@ -314,5 +314,8 @@
     ],
     "filament_toolchange_slowdown_additional_temp": [
         "8"
+    ],
+    "filament_unretract_dwell_time": [
+        "50"
     ]
 }

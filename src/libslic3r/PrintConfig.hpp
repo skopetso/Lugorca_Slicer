@@ -1432,6 +1432,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloats,              filament_dhop_ratio))
     // LUGOWARE: All speed override — force all speeds to this value (0 = disabled)
     ((ConfigOptionFloats,              filament_all_speed_override))
+    // LUGOWARE: Dwell (G4 P<ms>) after unretract for flexible filaments (0 = disabled)
+    ((ConfigOptionFloats,              filament_unretract_dwell_time))
 )
 
 // This object is mapped to Perl as Slic3r::Config::Print.

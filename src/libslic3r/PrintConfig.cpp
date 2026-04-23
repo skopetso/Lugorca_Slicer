@@ -2659,6 +2659,15 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloats { 0. });
 
+    def = this->add("filament_unretract_dwell_time", coFloats);
+    def->label = L("Unretract dwell time");
+    def->tooltip = L("Wait time after unretract (G4 P<ms>). Useful for flexible filaments that need time to stabilize extrusion pressure before printing. 0 = disabled.");
+    def->sidetext = L("ms");
+    def->min = 0;
+    def->max = 2000;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloats { 0. });
+
     def = this->add("filament_cooling_initial_speed", coFloats);
     def->label = L("Speed of the first cooling move");
     def->tooltip = L("Cooling moves are gradually accelerating beginning at this speed.");
