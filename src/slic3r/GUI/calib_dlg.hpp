@@ -180,5 +180,29 @@ protected:
     TextInput* m_tiJDEnd;
     Plater* m_plater;
 };
+
+// LUGOWARE: Filament Calibration
+// Load the bundled test STL N times, assign each copy to filament 1..N (T0..Tn-1).
+enum class FilamentCalibType {
+    Standard, // filament calibration.stl,  keeps current process preset
+    Foam,     // filament calibration_foam.stl, switches process preset to FOAM(0.25)
+};
+
+class Filament_Calibration_Dlg : public DPIDialog
+{
+public:
+    Filament_Calibration_Dlg(wxWindow* parent, wxWindowID id, Plater* plater,
+                             FilamentCalibType type = FilamentCalibType::Standard);
+    ~Filament_Calibration_Dlg();
+    void on_dpi_changed(const wxRect& suggested_rect) override;
+
+protected:
+    virtual void on_start(wxCommandEvent& event);
+
+    TextInput*          m_ti_count = nullptr;
+    Plater*             m_plater;
+    FilamentCalibType   m_type;
+};
+
 }} // namespace Slic3r::GUI
 #endif

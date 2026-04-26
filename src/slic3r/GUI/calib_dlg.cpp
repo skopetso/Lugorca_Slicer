@@ -2,13 +2,16 @@
 #include "GUI_App.hpp"
 #include "MsgDialog.hpp"
 #include "I18N.hpp"
+#include "Tab.hpp"
 #include <wx/dcgraph.h>
 #include "MainFrame.hpp"
 #include "Widgets/DialogButtons.hpp"
 #include "Widgets/HyperLink.hpp"
 #include <string>
 #include <vector>
+#include <boost/filesystem.hpp>
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/Utils.hpp"
 
 namespace Slic3r { namespace GUI {
 
@@ -140,7 +143,7 @@ PA_Calibration_Dlg::PA_Calibration_Dlg(wxWindow* parent, wxWindowID id, Plater* 
     // Print Numbers
     wxBoxSizer* cb_sizer = new wxBoxSizer(wxHORIZONTAL);
     auto cb_title = new wxStaticText(this, wxID_ANY, cb_print_no_str, wxDefaultPosition, st_size, 0);
-    m_cbPrintNum = new CheckBox(this);
+    m_cbPrintNum = new ::CheckBox(this);
     m_cbPrintNum->SetValue(false);
     m_cbPrintNum->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent& e) {
         (m_params.print_numbers) = (m_params.print_numbers) ? false : true;
@@ -1432,6 +1435,192 @@ void Cornering_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void Cornering_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
+    this->Refresh();
+    Fit();
+}
+
+// ==========================================================================
+// LUGOWARE: Filament Calibration
+// ==========================================================================
+Filament_Calibration_Dlg::Filament_Calibration_Dlg(wxWindow* parent, wxWindowID id, Plater* plater, FilamentCalibType type)
+    : DPIDialog(parent, id,
+                type == FilamentCalibType::Foam ? _L("Foam filament calibration") : _L("Filament calibration"),
+                wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE),
+      m_plater(plater), m_type(type)
+{
+    SetBackgroundColour(*wxWHITE);
+    SetForegroundColour(wxColour("#363636"));
+    SetFont(Label::Body_14);
+
+    wxBoxSizer* v_sizer = new wxBoxSizer(wxVERTICAL);
+    SetSizer(v_sizer);
+
+    wxString count_label_str = _L("Number of filaments: ");
+
+    LabeledStaticBox* stb = new LabeledStaticBox(this, _L("Settings"));
+    wxStaticBoxSizer* settings_sizer = new wxStaticBoxSizer(stb, wxVERTICAL);
+    settings_sizer->AddSpacer(FromDIP(5));
+
+    // Count input only
+    auto count_sizer = new wxBoxSizer(wxHORIZONTAL);
+    auto count_label = new wxStaticText(this, wxID_ANY, count_label_str, wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
+    int default_count = std::max(1, wxGetApp().filaments_cnt());
+    m_ti_count = new TextInput(this, std::to_string(default_count), "", "", wxDefaultPosition, FromDIP(wxSize(80, -1)));
+    m_ti_count->GetTextCtrl()->SetValidator(wxTextValidator(wxFILTER_NUMERIC));
+    count_sizer->Add(count_label, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
+    count_sizer->Add(m_ti_count,  0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
+    settings_sizer->Add(count_sizer, 0, wxLEFT, FromDIP(3));
+
+    settings_sizer->AddSpacer(FromDIP(5));
+
+    auto hint = new wxStaticText(this, wxID_ANY,
+        _L("Loads the bundled test STL N times and assigns each copy to filament 1..N (T0..Tn-1).\n"
+           "Process preset and filament presets stay as currently configured."),
+        wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
+    hint->SetForegroundColour(wxColour("#606060"));
+    settings_sizer->Add(hint, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+
+    v_sizer->Add(settings_sizer, 0, wxTOP | wxRIGHT | wxLEFT | wxEXPAND, FromDIP(10));
+    v_sizer->AddSpacer(FromDIP(5));
+
+    auto dlg_btns = new DialogButtons(this, {"OK", "Cancel"});
+    v_sizer->Add(dlg_btns, 0, wxEXPAND);
+    dlg_btns->GetOK()->Bind(wxEVT_BUTTON, &Filament_Calibration_Dlg::on_start, this);
+
+    wxGetApp().UpdateDlgDarkUI(this);
+
+    Layout();
+    Fit();
+    v_sizer->SetSizeHints(this);
+}
+
+Filament_Calibration_Dlg::~Filament_Calibration_Dlg() {}
+
+void Filament_Calibration_Dlg::on_start(wxCommandEvent& event) {
+    long count = 0;
+    if (!m_ti_count->GetTextCtrl()->GetValue().ToLong(&count) || count < 1) {
+        MessageDialog msg_dlg(nullptr, _L("Please enter a valid number (>= 1)."), wxEmptyString, wxICON_WARNING | wxOK);
+        msg_dlg.ShowModal();
+        return;
+    }
+
+    const int avail = std::max(1, wxGetApp().filaments_cnt());
+    if (count > avail) {
+        wxString warn = wxString::Format(
+            _L("Count (%ld) exceeds loaded filaments (%d). Extras reuse Filament %d."),
+            count, avail, avail);
+        MessageDialog msg_dlg(nullptr, warn, wxEmptyString, wxICON_INFORMATION | wxOK);
+        msg_dlg.ShowModal();
+    }
+
+    // Resolve bundled STL path based on type
+    const std::string stl_name = (m_type == FilamentCalibType::Foam)
+        ? "filament calibration_foam.stl"
+        : "filament calibration.stl";
+    boost::filesystem::path stl_path = boost::filesystem::path(Slic3r::resources_dir())
+        / "calib" / "filament_calibration" / stl_name;
+    if (!boost::filesystem::exists(stl_path)) {
+        wxString err = wxString::Format(
+            _L("Test STL not found at:\n%s\n\nPlease reinstall Lugorca Slicer or add the file manually."),
+            wxString::FromUTF8(stl_path.string()));
+        MessageDialog msg_dlg(nullptr, err, wxEmptyString, wxICON_ERROR | wxOK);
+        msg_dlg.ShowModal();
+        return;
+    }
+
+    // New blank project (keeps presets, clears objects)
+    wxString project_name = (m_type == FilamentCalibType::Foam) ? _L("Foam filament calibration") : _L("Filament calibration");
+    m_plater->new_project(true, true, project_name);
+    wxGetApp().mainframe->select_tab(size_t(MainFrame::tp3DEditor));
+
+    // Foam calibration: switch process preset to "FOAM(0.25)"
+    if (m_type == FilamentCalibType::Foam) {
+        auto &prints = wxGetApp().preset_bundle->prints;
+        const std::string target = "FOAM(0.25)";
+        if (prints.find_preset(target) != nullptr) {
+            prints.select_preset_by_name(target, true);
+            wxGetApp().load_current_presets();
+        } else {
+            MessageDialog warn_dlg(nullptr,
+                wxString::Format(_L("Process preset \"%s\" not found. Using current preset."), wxString::FromUTF8(target)),
+                wxEmptyString, wxICON_WARNING | wxOK);
+            warn_dlg.ShowModal();
+        }
+    }
+
+    // Load the test STL N times (same file repeated)
+    const std::string stl_str = stl_path.string();
+    for (long i = 0; i < count; ++i) {
+        m_plater->add_model(false, stl_str);
+    }
+
+    // Assign each object to a physical filament (T0 = Filament 1, T1 = 2, ...).
+    // Extras (count > avail) reuse the last filament.
+    auto &mobjects = m_plater->model().objects;
+    std::vector<size_t> changed_idxs;
+    changed_idxs.reserve(mobjects.size());
+    for (size_t i = 0; i < mobjects.size(); ++i) {
+        int extruder_id = int(std::min<size_t>(i + 1, size_t(avail)));
+        mobjects[i]->config.set_key_value("extruder", new ConfigOptionInt(extruder_id));
+        changed_idxs.push_back(i);
+    }
+
+    // LUGOWARE: Apply calibration-specific values to the active process preset
+    // (sidebar) so the user sees them and can tweak before slicing.
+    // Uses Tab::load_config which marks the preset dirty and updates UI.
+    {
+        DynamicPrintConfig calib_cfg;
+        if (m_type == FilamentCalibType::Foam) {
+            calib_cfg.set_key_value("layer_height",                        new ConfigOptionFloat(0.25));
+            calib_cfg.set_key_value("top_shell_layers",                    new ConfigOptionInt(10));
+            calib_cfg.set_key_value("sparse_infill_pattern",               new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+            calib_cfg.set_key_value("sparse_infill_density",               new ConfigOptionPercent(15));
+            calib_cfg.set_key_value("infill_direction",                    new ConfigOptionFloat(0.0));
+            calib_cfg.set_key_value("infill_combination",                  new ConfigOptionBool(true));
+            calib_cfg.set_key_value("infill_combination_max_layer_height", new ConfigOptionFloatOrPercent(200, true));
+        } else {
+            calib_cfg.set_key_value("layer_height",          new ConfigOptionFloat(0.2));
+            calib_cfg.set_key_value("sparse_infill_pattern", new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+            calib_cfg.set_key_value("sparse_infill_density", new ConfigOptionPercent(10));
+            calib_cfg.set_key_value("top_shell_layers",      new ConfigOptionInt(8));
+            calib_cfg.set_key_value("filter_out_gap_fill",   new ConfigOptionFloat(50.0));
+        }
+        if (Tab *print_tab = wxGetApp().get_tab(Preset::TYPE_PRINT))
+            print_tab->load_config(calib_cfg);
+    }
+
+    // Single vertical column layout: T0 at top (highest Y), Tn-1 at bottom.
+    // Centered on the current plate with 5 mm gap between copies.
+    if (!mobjects.empty()) {
+        Slic3r::BoundingBoxf3 bbox = mobjects[0]->bounding_box_exact();
+        const double sy = bbox.size().y();
+        const double gap = 5.0; // mm
+
+        Slic3r::Vec3d plate_center = m_plater->get_partplate_list().get_curr_plate()->get_center_origin();
+        const double cx = plate_center.x();
+        const double cy = plate_center.y();
+
+        const int N = int(mobjects.size());
+        const double y_top = cy + 0.5 * double(N - 1) * (sy + gap);
+        for (size_t i = 0; i < mobjects.size(); ++i) {
+            const double y = y_top - double(i) * (sy + gap);
+            if (!mobjects[i]->instances.empty()) {
+                auto *inst = mobjects[i]->instances[0];
+                Slic3r::Vec3d off = inst->get_offset();
+                off.x() = cx;
+                off.y() = y;
+                inst->set_offset(off);
+            }
+        }
+    }
+
+    m_plater->changed_objects(changed_idxs);
+    m_plater->update();
+
+    EndModal(wxID_OK);
+}
+
+void Filament_Calibration_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
     this->Refresh();
     Fit();
 }

@@ -3467,6 +3467,24 @@ void MainFrame::init_menubar_as_editor()
         }, "", nullptr,
         [this]() {return m_plater->is_view3D_shown();; }, this);
 
+    // LUGOWARE: Filament Calibration
+    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Filament calibration"), _L("Filament calibration"),
+        [this](wxCommandEvent&) {
+            auto dlg = new Filament_Calibration_Dlg((wxWindow*)this, wxID_ANY, m_plater, FilamentCalibType::Standard);
+            dlg->ShowModal();
+            dlg->Destroy();
+        }, "", nullptr,
+        [this]() {return m_plater->is_view3D_shown();; }, this);
+
+    // LUGOWARE: Foam Filament Calibration
+    append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Foam filament calibration"), _L("Foam filament calibration"),
+        [this](wxCommandEvent&) {
+            auto dlg = new Filament_Calibration_Dlg((wxWindow*)this, wxID_ANY, m_plater, FilamentCalibType::Foam);
+            dlg->ShowModal();
+            dlg->Destroy();
+        }, "", nullptr,
+        [this]() {return m_plater->is_view3D_shown();; }, this);
+
     // help
     append_menu_item(m_topbar->GetCalibMenu(), wxID_ANY, _L("Tutorial"), _L("Calibration help"),
         [this](wxCommandEvent&) {
