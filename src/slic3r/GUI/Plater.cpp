@@ -4161,6 +4161,87 @@ private:
 };
 
 namespace {
+// LUGOWARE: BBL→LUGOWARE 프린터 전환 시 가져올 프로세스 키
+// (Tab.cpp 페이지 기준: Layer height + Line width + Seam + Wall generator
+//  + Walls and surfaces + Strength 전체 + Support 전체)
+const std::vector<std::string>& lugoware_transfer_keys() {
+    static const std::vector<std::string> keys = {
+        // Layer height
+        "layer_height", "initial_layer_print_height",
+        // Line width
+        "line_width", "initial_layer_line_width", "outer_wall_line_width", "inner_wall_line_width",
+        "top_surface_line_width", "sparse_infill_line_width", "internal_solid_infill_line_width", "support_line_width",
+        // Seam
+        "seam_position", "staggered_inner_seams", "seam_gap", "seam_slope_type", "seam_slope_conditional",
+        "scarf_angle_threshold", "scarf_overhang_threshold", "scarf_joint_speed", "seam_slope_start_height",
+        "seam_slope_entire_loop", "seam_slope_min_length", "seam_slope_steps", "scarf_joint_flow_ratio",
+        "seam_slope_inner_walls", "role_based_wipe_speed", "wipe_speed", "wipe_on_loops", "wipe_before_external_loop",
+        // Wall generator
+        "wall_generator", "wall_transition_angle", "wall_transition_filter_deviation", "wall_transition_length",
+        "wall_distribution_count", "initial_layer_min_bead_width", "min_bead_width", "min_feature_size", "min_length_factor",
+        // Walls and surfaces
+        "wall_sequence", "is_infill_first", "wall_direction",
+        "print_flow_ratio", "top_solid_infill_flow_ratio", "bottom_solid_infill_flow_ratio",
+        "set_other_flow_ratios", "first_layer_flow_ratio", "outer_wall_flow_ratio", "inner_wall_flow_ratio",
+        "overhang_flow_ratio", "sparse_infill_flow_ratio", "internal_solid_infill_flow_ratio",
+        "gap_fill_flow_ratio", "support_flow_ratio", "support_interface_flow_ratio",
+        "only_one_wall_top", "min_width_top_surface", "only_one_wall_first_layer",
+        "reduce_crossing_wall", "max_travel_detour_distance", "avoid_crossing_wall_offset",
+        "small_area_infill_flow_compensation",
+        // Strength: Walls
+        "wall_loops", "alternate_extra_wall", "detect_thin_wall",
+        // Strength: Top/bottom shells
+        "top_shell_layers", "top_shell_thickness", "top_surface_density", "top_surface_pattern",
+        "bottom_shell_layers", "bottom_shell_thickness", "bottom_surface_density", "bottom_surface_pattern",
+        "top_bottom_infill_wall_overlap",
+        // Strength: Infill
+        "sparse_infill_density", "disable_solid_infill", "fill_multiline", "sparse_infill_pattern",
+        "infill_direction", "sparse_infill_rotate_template", "skin_infill_density", "skeleton_infill_density",
+        "infill_lock_depth", "skin_infill_depth", "skin_infill_line_width", "skeleton_infill_line_width",
+        "symmetric_infill_y_axis", "infill_shift_step", "inverse_infill_step_layers",
+        "crosszag_rotation_step_layers", "crosszag_rotation_angle",
+        "lateral_lattice_angle_1", "lateral_lattice_angle_2", "infill_overhang_angle",
+        "infill_anchor_max", "infill_anchor", "internal_solid_infill_pattern", "solid_infill_direction",
+        "solid_infill_rotate_template", "gap_fill_target", "filter_out_gap_fill", "infill_wall_overlap",
+        // Strength: Advanced
+        "align_infill_direction_to_model", "extra_solid_infills", "bridge_angle", "internal_bridge_angle",
+        "minimum_sparse_infill_area", "infill_combination", "infill_combination_max_layer_height",
+        "detect_narrow_internal_solid_infill", "ensure_vertical_shell_thickness",
+        // Support: Support
+        "enable_support", "support_type", "support_style", "support_threshold_angle", "support_threshold_overlap",
+        "support_on_build_plate_only", "support_critical_regions_only", "support_remove_small_overhang",
+        "support_filament", "support_interface_filament", "support_angle", "support_expansion",
+        "support_top_z_distance", "support_bottom_z_distance", "support_object_xy_distance",
+        "support_object_first_layer_gap", "support_base_pattern", "support_base_pattern_spacing",
+        "support_interface_pattern", "support_interface_top_layers", "support_interface_bottom_layers",
+        "support_interface_loop_pattern", "support_interface_spacing", "support_bottom_interface_spacing",
+        "support_interface_not_for_body", "support_ironing", "support_ironing_pattern",
+        "support_ironing_spacing", "support_ironing_flow",
+        "bridge_no_support", "max_bridge_length", "enforce_support_layers", "independent_support_layer_height",
+        "skirt_start_angle",
+        // Support: Brim/Raft
+        "brim_type", "brim_width", "brim_object_gap", "brim_ears", "brim_ears_max_angle",
+        "brim_ears_detection_length", "brim_use_efc_outline",
+        "raft_layers", "raft_first_layer_density", "raft_first_layer_expansion", "raft_contact_distance", "raft_expansion",
+        // Support: Tree support
+        "tree_support_branch_angle", "tree_support_branch_angle_organic", "tree_support_angle_slow",
+        "tree_support_branch_diameter", "tree_support_branch_diameter_angle", "tree_support_branch_diameter_organic",
+        "tree_support_branch_distance", "tree_support_branch_distance_organic",
+        "tree_support_tip_diameter", "tree_support_top_rate", "tree_support_wall_count", "tree_support_with_infill",
+    };
+    return keys;
+}
+
+// LUGOWARE: BBL→LUGOWARE 전환 시 백업할 데이터 모음
+struct LugowareTransferState {
+    DynamicPrintConfig backup_cfg;  // 활성 프로세스 프리셋의 transfer_keys 값
+    std::map<ObjectID, TriangleSelector::TriangleSplittingData> mmu_backup;
+    std::map<ObjectID, TriangleSelector::TriangleSplittingData> support_backup;
+    std::map<ObjectID, TriangleSelector::TriangleSplittingData> seam_backup;
+    std::map<ObjectID, TriangleSelector::TriangleSplittingData> fuzzy_backup;
+    bool valid = false;
+};
+
 bool emboss_svg(Plater& plater, const wxString &svg_file, const Vec2d& mouse_drop_position)
 {
     std::string svg_file_str = into_u8(svg_file);
@@ -9142,17 +9223,34 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
 
     auto idx = combo->get_filament_idx();
 
-    // LUGOWARE: 프린터 변경 시 컬러페인팅(mmu_segmentation_facets) 유지
-    // 원본 코드는 프린터/필라멘트 개수 변경 과정에서 페인팅 데이터가 날아감.
-    // FacetsAnnotation은 operator=이 private이라 m_data(TriangleSplittingData)로 백업.
-    std::map<ObjectID, TriangleSelector::TriangleSplittingData> lugoware_mmu_backup;
+    // LUGOWARE: 프린터 변경 시 3MF 설정/페인팅 보존 (Build 82 + 확장)
+    // - 항상: mmu_segmentation_facets (컬러페인팅) 유지
+    // - LUGOWARE 프린터로 전환 시: 활성 프로세스 config + 4종 facet + 필라멘트 메타 백업,
+    //   전환 완료 후 모달로 LUGOWARE 호환 프로세스 프리셋 선택받아 호환 키 override
+    LugowareTransferState lugoware_state;
     if (preset_type == Preset::TYPE_PRINTER) {
+        // 활성 프로세스 config의 transfer_keys 백업
+        auto& active_print_cfg = wxGetApp().preset_bundle->prints.get_edited_preset().config;
+        for (const std::string& key : lugoware_transfer_keys()) {
+            if (active_print_cfg.has(key)) {
+                if (auto* opt = active_print_cfg.option(key))
+                    lugoware_state.backup_cfg.set_key_value(key, opt->clone());
+            }
+        }
+        // 4종 facet 백업
         for (ModelObject *mo : model.objects) {
             for (ModelVolume *mv : mo->volumes) {
                 if (!mv->mmu_segmentation_facets.empty())
-                    lugoware_mmu_backup[mv->id()] = mv->mmu_segmentation_facets.get_data();
+                    lugoware_state.mmu_backup[mv->id()] = mv->mmu_segmentation_facets.get_data();
+                if (!mv->supported_facets.empty())
+                    lugoware_state.support_backup[mv->id()] = mv->supported_facets.get_data();
+                if (!mv->seam_facets.empty())
+                    lugoware_state.seam_backup[mv->id()] = mv->seam_facets.get_data();
+                if (!mv->fuzzy_skin_facets.empty())
+                    lugoware_state.fuzzy_backup[mv->id()] = mv->fuzzy_skin_facets.get_data();
             }
         }
+        lugoware_state.valid = true;
     }
 
     // BBS:Save the plate parameters before switching
@@ -9319,18 +9417,93 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
          plate->update_slice_result_valid_state(false);
     }
 
-    // LUGOWARE: 프린터 변경 후 컬러페인팅 복원
-    if (preset_type == Preset::TYPE_PRINTER && !lugoware_mmu_backup.empty()) {
+    // LUGOWARE: 프린터 변경 후 백업 데이터 복원
+    if (lugoware_state.valid) {
+        // 1. mmu_segmentation_facets는 항상 복원 (컬러페인팅 유지 - Build 82와 동일 동작)
         for (ModelObject *mo : model.objects) {
             for (ModelVolume *mv : mo->volumes) {
-                auto it = lugoware_mmu_backup.find(mv->id());
-                if (it != lugoware_mmu_backup.end()) {
+                auto it_mmu = lugoware_state.mmu_backup.find(mv->id());
+                if (it_mmu != lugoware_state.mmu_backup.end()) {
                     TriangleSelector selector(mv->mesh());
-                    selector.deserialize(it->second, false);
+                    selector.deserialize(it_mmu->second, false);
                     mv->mmu_segmentation_facets.set(selector);
                 }
             }
         }
+
+        // 2. 새 프린터가 LUGOWARE 벤더이면 모달로 프로세스 프리셋 선택 + 호환 키 override
+        const Preset& new_printer = wxGetApp().preset_bundle->printers.get_edited_preset();
+        bool is_lugoware_printer = (new_printer.vendor && new_printer.vendor->name == "LUGOWARE");
+
+        if (is_lugoware_printer) {
+            // LUGOWARE 호환 프로세스 프리셋 목록
+            auto& prints_coll = wxGetApp().preset_bundle->prints;
+            wxArrayString choices;
+            std::vector<std::string> choice_names;
+            for (const Preset& p : prints_coll) {
+                if (p.is_compatible && p.is_visible &&
+                    p.vendor && p.vendor->name == "LUGOWARE") {
+                    choices.Add(wxString::FromUTF8(p.name));
+                    choice_names.push_back(p.name);
+                }
+            }
+
+            bool apply_overrides = true;
+            std::string selected_preset;
+            if (!choices.IsEmpty()) {
+                wxSingleChoiceDialog dlg(this->q,
+                    _L("Select a Lugorca process preset to apply 3MF settings on top of:"),
+                    _L("Transfer 3MF settings"), choices);
+                dlg.SetSelection(0);
+                if (dlg.ShowModal() != wxID_OK) {
+                    apply_overrides = false; // 캔슬: 불러오기 취소
+                } else {
+                    selected_preset = choice_names[(size_t)dlg.GetSelection()];
+                }
+            }
+            // 호환 프리셋 0개면 모달 스킵 + 호환 키 자동 적용 (apply_overrides 유지)
+
+            if (apply_overrides) {
+                // 3. 선택 프리셋 활성화 (있을 때만)
+                if (!selected_preset.empty()) {
+                    prints_coll.select_preset_by_name(selected_preset, true);
+                    wxGetApp().load_current_presets();
+                }
+                // 4. 호환 키만 골라서 활성 프로세스 프리셋에 override
+                auto& current_print_cfg = prints_coll.get_edited_preset().config;
+                DynamicPrintConfig override_cfg;
+                for (const auto& key : lugoware_transfer_keys()) {
+                    if (lugoware_state.backup_cfg.has(key) && current_print_cfg.has(key)) {
+                        if (auto* opt = lugoware_state.backup_cfg.option(key))
+                            override_cfg.set_key_value(key, opt->clone());
+                    }
+                }
+                if (Tab* print_tab = wxGetApp().get_tab(Preset::TYPE_PRINT))
+                    print_tab->load_config(override_cfg);
+
+                // 5. 추가 facet 복원 (서포트/시임/퍼지 페인팅)
+                for (ModelObject *mo : model.objects) {
+                    for (ModelVolume *mv : mo->volumes) {
+                        auto it_sup = lugoware_state.support_backup.find(mv->id());
+                        if (it_sup != lugoware_state.support_backup.end()) {
+                            TriangleSelector sel(mv->mesh()); sel.deserialize(it_sup->second, false);
+                            mv->supported_facets.set(sel);
+                        }
+                        auto it_seam = lugoware_state.seam_backup.find(mv->id());
+                        if (it_seam != lugoware_state.seam_backup.end()) {
+                            TriangleSelector sel(mv->mesh()); sel.deserialize(it_seam->second, false);
+                            mv->seam_facets.set(sel);
+                        }
+                        auto it_fuzzy = lugoware_state.fuzzy_backup.find(mv->id());
+                        if (it_fuzzy != lugoware_state.fuzzy_backup.end()) {
+                            TriangleSelector sel(mv->mesh()); sel.deserialize(it_fuzzy->second, false);
+                            mv->fuzzy_skin_facets.set(sel);
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }
 
