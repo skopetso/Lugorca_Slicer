@@ -4262,6 +4262,68 @@ bool emboss_svg(Plater& plater, const wxString &svg_file, const Vec2d& mouse_dro
 
     return svg->create_volume(svg_file_str, mouse_drop_position, ModelVolumeType::MODEL_PART);
 }
+
+// LUGOWARE: BBL→LUGOWARE 전환 시 노즐 + 프로세스 프리셋을 한 모달에서 선택하기 위한 다이얼로그
+class LugowareTransferDialog : public wxDialog {
+public:
+    // printer_choices: { display name, internal preset name }
+    LugowareTransferDialog(wxWindow* parent,
+                           const std::vector<std::pair<wxString, std::string>>& printer_choices,
+                           int default_printer_idx,
+                           const std::vector<std::pair<wxString, std::string>>& process_choices)
+        : wxDialog(parent, wxID_ANY, _L("Transfer 3MF settings"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE)
+        , m_printer_choices(printer_choices)
+        , m_process_choices(process_choices)
+    {
+        auto* sizer = new wxBoxSizer(wxVERTICAL);
+        SetSizer(sizer);
+        sizer->Add(new wxStaticText(this, wxID_ANY,
+            _L("Select a Lugorca printer (nozzle) and process preset to apply 3MF settings on top of:")),
+            0, wxALL, 8);
+
+        // Nozzle/printer choice
+        wxArrayString printer_arr;
+        for (const auto& p : m_printer_choices) printer_arr.Add(p.first);
+        sizer->Add(new wxStaticText(this, wxID_ANY, _L("Printer / Nozzle")), 0, wxLEFT | wxRIGHT, 8);
+        m_choice_printer = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxSize(360, -1), printer_arr);
+        if (default_printer_idx >= 0 && default_printer_idx < (int)printer_arr.size())
+            m_choice_printer->SetSelection(default_printer_idx);
+        else if (!printer_arr.IsEmpty())
+            m_choice_printer->SetSelection(0);
+        sizer->Add(m_choice_printer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 8);
+
+        // Process listbox
+        sizer->Add(new wxStaticText(this, wxID_ANY, _L("Process preset")), 0, wxLEFT | wxRIGHT, 8);
+        wxArrayString proc_arr;
+        for (const auto& p : m_process_choices) proc_arr.Add(p.first);
+        m_lb_process = new wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(360, 220), proc_arr, wxLB_SINGLE);
+        if (!proc_arr.IsEmpty()) m_lb_process->SetSelection(0);
+        sizer->Add(m_lb_process, 1, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 8);
+
+        // OK/Cancel
+        auto* btns = CreateButtonSizer(wxOK | wxCANCEL);
+        sizer->Add(btns, 0, wxALL | wxEXPAND, 8);
+
+        Fit();
+        CenterOnParent();
+    }
+
+    std::string get_printer_preset() const {
+        int idx = m_choice_printer ? m_choice_printer->GetSelection() : -1;
+        return (idx >= 0 && idx < (int)m_printer_choices.size()) ? m_printer_choices[idx].second : std::string();
+    }
+    std::string get_process_preset() const {
+        int idx = m_lb_process ? m_lb_process->GetSelection() : -1;
+        return (idx >= 0 && idx < (int)m_process_choices.size()) ? m_process_choices[idx].second : std::string();
+    }
+
+private:
+    wxChoice*  m_choice_printer = nullptr;
+    wxListBox* m_lb_process     = nullptr;
+    std::vector<std::pair<wxString, std::string>> m_printer_choices;
+    std::vector<std::pair<wxString, std::string>> m_process_choices;
+};
+
 }
 
 // State to manage showing after export notifications and device ejecting
@@ -9436,35 +9498,49 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
         bool is_lugoware_printer = (new_printer.vendor && new_printer.vendor->name == "LUGOWARE");
 
         if (is_lugoware_printer) {
-            // LUGOWARE 호환 프로세스 프리셋 목록
+            // LUGOWARE 같은 모델의 노즐별 프린터 프리셋 + 호환 프로세스 프리셋 모달
+            auto& printers_coll = wxGetApp().preset_bundle->printers;
+            std::string base_model = new_printer.config.opt_string("printer_model");
+            std::vector<std::pair<wxString, std::string>> printer_choices;  // {표시이름, 내부이름}
+            int default_printer_idx = -1;
+            for (const Preset& p : printers_coll) {
+                if (p.is_visible && p.vendor && p.vendor->name == "LUGOWARE"
+                    && p.config.opt_string("printer_model") == base_model) {
+                    if (p.name == new_printer.name) default_printer_idx = (int)printer_choices.size();
+                    printer_choices.emplace_back(wxString::FromUTF8(p.name), p.name);
+                }
+            }
+
             auto& prints_coll = wxGetApp().preset_bundle->prints;
-            wxArrayString choices;
-            std::vector<std::string> choice_names;
+            std::vector<std::pair<wxString, std::string>> process_choices;
             for (const Preset& p : prints_coll) {
                 if (p.is_compatible && p.is_visible &&
                     p.vendor && p.vendor->name == "LUGOWARE") {
-                    choices.Add(wxString::FromUTF8(p.name));
-                    choice_names.push_back(p.name);
+                    process_choices.emplace_back(wxString::FromUTF8(p.name), p.name);
                 }
             }
 
             bool apply_overrides = true;
             std::string selected_preset;
-            if (!choices.IsEmpty()) {
-                wxSingleChoiceDialog dlg(this->q,
-                    _L("Select a Lugorca process preset to apply 3MF settings on top of:"),
-                    _L("Transfer 3MF settings"), choices);
-                dlg.SetSelection(0);
+            std::string selected_printer;
+            if (!process_choices.empty()) {
+                LugowareTransferDialog dlg(this->q, printer_choices, default_printer_idx, process_choices);
                 if (dlg.ShowModal() != wxID_OK) {
                     apply_overrides = false; // 캔슬: 불러오기 취소
                 } else {
-                    selected_preset = choice_names[(size_t)dlg.GetSelection()];
+                    selected_preset  = dlg.get_process_preset();
+                    selected_printer = dlg.get_printer_preset();
                 }
             }
             // 호환 프리셋 0개면 모달 스킵 + 호환 키 자동 적용 (apply_overrides 유지)
 
             if (apply_overrides) {
-                // 3. 선택 프리셋 활성화 (있을 때만)
+                // 사용자가 모달에서 다른 노즐(프린터 프리셋) 선택했으면 변경
+                if (!selected_printer.empty() && selected_printer != new_printer.name) {
+                    printers_coll.select_preset_by_name(selected_printer, true);
+                    wxGetApp().load_current_presets();
+                }
+                // 3. 선택 프로세스 프리셋 활성화 (있을 때만)
                 if (!selected_preset.empty()) {
                     prints_coll.select_preset_by_name(selected_preset, true);
                     wxGetApp().load_current_presets();

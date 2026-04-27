@@ -931,7 +931,7 @@ static std::vector<std::string> s_Preset_print_options {
     "sparse_infill_filament", "solid_infill_filament", "support_filament", "support_interface_filament","support_interface_not_for_body",
     "ooze_prevention", "standby_temperature_delta", "preheat_time","preheat_steps", "heating_time", "interface_shells", "line_width", "initial_layer_line_width", "inner_wall_line_width",
     "outer_wall_line_width", "sparse_infill_line_width", "internal_solid_infill_line_width",
-    "skin_infill_line_width","skeleton_infill_line_width",
+    "skin_infill_line_width","skeleton_infill_line_width","skeleton_infill_pattern","skeleton_infill_direction","skin_infill_pattern","skin_infill_direction",
     "top_surface_line_width", "support_line_width", "infill_wall_overlap","top_bottom_infill_wall_overlap", "bridge_flow", "internal_bridge_flow",
     "elefant_foot_compensation", "elefant_foot_compensation_layers", "xy_contour_compensation", "xy_contour_compensation_layer_step", "xy_contour_compensation_layer_step_thickness", "xy_contour_compensation_layer_step_start_on", "xy_hole_compensation", "xy_hole_compensation_layer_step", "xy_hole_compensation_layer_step_thickness", "xy_hole_compensation_layer_step_start_on", "resolution", "enable_prime_tower", "prime_tower_enable_framework",
     "prime_tower_width", "prime_tower_brim_width", "prime_tower_skip_points", "prime_volume",

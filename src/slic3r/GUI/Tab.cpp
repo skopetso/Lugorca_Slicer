@@ -1513,6 +1513,12 @@ void Tab::on_value_change(const std::string& opt_key, const boost::any& value)
         return;
     }
 
+    // LUGOWARE: skin/skeleton infill 패턴 변경 시 토글 강제 갱신 (infill_shift_step 노출 조건)
+    if (opt_key == "skin_infill_pattern" || opt_key == "skeleton_infill_pattern") {
+        if (supports_printer_technology(ptFFF))
+            m_config_manipulation.update_print_fff_config(m_config, m_type < Preset::TYPE_COUNT, m_type == Preset::TYPE_PLATE);
+    }
+
     if (opt_key == "compatible_prints")
         this->compatible_widget_reload(m_compatible_prints);
     if (opt_key == "compatible_printers")
@@ -2412,7 +2418,11 @@ void TabPrint::build()
         optgroup->append_single_option_line("infill_direction", "strength_settings_infill#direction");
         optgroup->append_single_option_line("sparse_infill_rotate_template", "strength_settings_infill_rotation_template_metalanguage");
         optgroup->append_single_option_line("skin_infill_density", "strength_settings_patterns#locked-zag");
+        optgroup->append_single_option_line("skin_infill_pattern", "strength_settings_patterns#locked-zag");
+        optgroup->append_single_option_line("skin_infill_direction", "strength_settings_patterns#locked-zag");
         optgroup->append_single_option_line("skeleton_infill_density", "strength_settings_patterns#locked-zag");
+        optgroup->append_single_option_line("skeleton_infill_pattern", "strength_settings_patterns#locked-zag");
+        optgroup->append_single_option_line("skeleton_infill_direction", "strength_settings_patterns#locked-zag");
         optgroup->append_single_option_line("infill_lock_depth", "strength_settings_patterns#locked-zag");
         optgroup->append_single_option_line("skin_infill_depth", "strength_settings_patterns#locked-zag");
         optgroup->append_single_option_line("skin_infill_line_width", "strength_settings_patterns#locked-zag");

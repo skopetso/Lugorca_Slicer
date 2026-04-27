@@ -629,10 +629,16 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, co
     //cross zag
     bool is_cross_zag = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipCrossZag;
     bool is_locked_zig = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipLockedZag;
+    // LUGOWARE: Locked Zag 내부의 skin/skeleton 패턴이 CrossZag인 경우에도 infill_shift_step 노출
+    bool skin_is_cross_zag = config->option<ConfigOptionEnum<InfillPattern>>("skin_infill_pattern")->value == InfillPattern::ipCrossZag;
+    bool skeleton_is_cross_zag = config->option<ConfigOptionEnum<InfillPattern>>("skeleton_infill_pattern")->value == InfillPattern::ipCrossZag;
 
-    toggle_line("infill_shift_step", is_cross_zag || is_locked_zig);
+    toggle_line("infill_shift_step",
+                is_cross_zag ||
+                (is_locked_zig && (skin_is_cross_zag || skeleton_is_cross_zag)));
     
-    for (auto el : { "skeleton_infill_density", "skin_infill_density", "infill_lock_depth", "skin_infill_depth","skin_infill_line_width", "skeleton_infill_line_width" })
+    for (auto el : { "skeleton_infill_density", "skin_infill_density", "infill_lock_depth", "skin_infill_depth","skin_infill_line_width", "skeleton_infill_line_width",
+                     "skin_infill_pattern", "skin_infill_direction", "skeleton_infill_pattern", "skeleton_infill_direction" })
         toggle_line(el, is_locked_zig);
 
     bool is_zig_zag = config->option<ConfigOptionEnum<InfillPattern>>("sparse_infill_pattern")->value == InfillPattern::ipZigZag;

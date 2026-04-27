@@ -2999,6 +2999,50 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Octagram Spiral"));
     def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipCrossHatch));
 
+    // LUGOWARE: Locked Zag 인필 패턴의 skeleton 영역에 적용할 보조 패턴
+    def = this->add("skeleton_infill_pattern", coEnum);
+    def->label = L("Skeleton infill pattern");
+    def->category = L("Strength");
+    def->tooltip = L("Pattern used for the skeleton (interior) region when Locked Zag sparse infill is selected.");
+    def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
+    def->enum_values   = print_config_def.get("sparse_infill_pattern")->enum_values;
+    def->enum_labels   = print_config_def.get("sparse_infill_pattern")->enum_labels;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+
+    // LUGOWARE: Locked Zag skeleton 영역 인필 각도
+    def = this->add("skeleton_infill_direction", coFloat);
+    def->label    = L("Skeleton infill direction");
+    def->category = L("Strength");
+    def->tooltip  = L("Angle for the skeleton infill direction in Locked Zag pattern. Set independently from the main sparse infill direction.");
+    def->sidetext = u8"°";
+    def->min      = 0;
+    def->max      = 360;
+    def->mode     = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(45));
+
+    // LUGOWARE: Locked Zag 인필 패턴의 skin (외곽) 영역에 적용할 보조 패턴
+    def = this->add("skin_infill_pattern", coEnum);
+    def->label = L("Skin infill pattern");
+    def->category = L("Strength");
+    def->tooltip = L("Pattern used for the skin (outer) region when Locked Zag sparse infill is selected.");
+    def->enum_keys_map = &ConfigOptionEnum<InfillPattern>::get_enum_values();
+    def->enum_values   = print_config_def.get("sparse_infill_pattern")->enum_values;
+    def->enum_labels   = print_config_def.get("sparse_infill_pattern")->enum_labels;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipCrossZag));
+
+    // LUGOWARE: Locked Zag skin 영역 인필 각도
+    def = this->add("skin_infill_direction", coFloat);
+    def->label    = L("Skin infill direction");
+    def->category = L("Strength");
+    def->tooltip  = L("Angle for the skin infill direction in Locked Zag pattern. Set independently from the main sparse infill direction.");
+    def->sidetext = u8"°";
+    def->min      = 0;
+    def->max      = 360;
+    def->mode     = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(45));
+
     def           = this->add("lateral_lattice_angle_1", coFloat);
     def->label    = L("Lateral lattice angle 1");
     def->category = L("Strength");

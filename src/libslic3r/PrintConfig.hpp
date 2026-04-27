@@ -1108,6 +1108,10 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat, skin_infill_depth))
     ((ConfigOptionFloatOrPercent, skin_infill_line_width))
     ((ConfigOptionFloatOrPercent, skeleton_infill_line_width))
+    ((ConfigOptionEnum<InfillPattern>, skeleton_infill_pattern))
+    ((ConfigOptionFloat, skeleton_infill_direction))
+    ((ConfigOptionEnum<InfillPattern>, skin_infill_pattern))
+    ((ConfigOptionFloat, skin_infill_direction))
     ((ConfigOptionBool, infill_combination))
     // Orca:
     ((ConfigOptionFloatOrPercent,                infill_combination_max_layer_height))

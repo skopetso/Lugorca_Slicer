@@ -3859,6 +3859,38 @@ void FillLockedZag::fill_surface_locked_zag (const Surface *                    
         }
     };
 
+    // LUGOWARE: skeleton_infill_pattern + skeleton_infill_direction 옵션
+    InfillPattern skel_pattern  = ipRectilinear;
+    double        skel_angle_rad = this->angle; // 기본은 sparse 각도
+    if (params.config != nullptr) {
+        skel_pattern   = params.config->skeleton_infill_pattern.value;
+        skel_angle_rad = Geometry::deg2rad((float)params.config->skeleton_infill_direction.value);
+    }
+    // skeleton 영역에선 locked_zag 분기 타지 않게
+    zig_params.locked_zag = false;
+    zig_params.pattern    = skel_pattern;
+
+    // 메인 fill 객체에 적용할 임시 각도 백업 (rectilinear/zigzag일 때 this->fill_surface 사용)
+    double saved_angle = this->angle;
+    this->angle        = skel_angle_rad;
+
+    std::unique_ptr<Fill> alt_fill;
+    if (skel_pattern != ipRectilinear && skel_pattern != ipZigZag && skel_pattern != ipLockedZag) {
+        alt_fill.reset(Fill::new_from_type(skel_pattern));
+        if (alt_fill) {
+            alt_fill->layer_id            = this->layer_id;
+            alt_fill->z                   = this->z;
+            alt_fill->spacing             = this->spacing;
+            alt_fill->overlap             = this->overlap;
+            alt_fill->angle               = skel_angle_rad;
+            alt_fill->bounding_box        = this->bounding_box;
+            alt_fill->link_max_length     = this->link_max_length;
+            alt_fill->loop_clipping       = this->loop_clipping;
+            alt_fill->print_config        = this->print_config;
+            alt_fill->print_object_config = this->print_object_config;
+        }
+    }
+
     auto it = this->lock_param.skeleton_density_params.begin();
     while (it != this->lock_param.skeleton_density_params.end()) {
         ExPolygons region_exp = union_safety_offset_ex(it->second);
@@ -3868,7 +3900,11 @@ void FillLockedZag::fill_surface_locked_zag (const Surface *                    
         for (ExPolygon &exp : exps) {
             zig_surface.expolygon = exp;
 
-            Polylines zig_polylines_out = this->fill_surface(&zig_surface, zig_params);
+            Polylines zig_polylines_out;
+            if (alt_fill)
+                zig_polylines_out = alt_fill->fill_surface(&zig_surface, zig_params);
+            else
+                zig_polylines_out = this->fill_surface(&zig_surface, zig_params);
             skeloton_lines.insert(skeloton_lines.end(), zig_polylines_out.begin(), zig_polylines_out.end());
         }
         it++;
@@ -3877,10 +3913,42 @@ void FillLockedZag::fill_surface_locked_zag (const Surface *                    
     // set skeleton flow
     generate_for_different_flow(this->lock_param.skeleton_flow_params, skeloton_lines);
 
+    // LUGOWARE: skin 영역 채우기 전에 메인 fill 각도 복구
+    this->angle = saved_angle;
+
     // skin exps
     bool       cross_get      = false;
     FillParams cross_params   = params;
     cross_params.locked_zag = false;
+    // LUGOWARE: skin_infill_pattern + skin_infill_direction
+    InfillPattern skin_pattern   = ipCrossZag;
+    double        skin_angle_rad = this->angle;
+    if (params.config != nullptr) {
+        skin_pattern   = params.config->skin_infill_pattern.value;
+        skin_angle_rad = Geometry::deg2rad((float)params.config->skin_infill_direction.value);
+    }
+    cross_params.pattern = skin_pattern;
+    double saved_skin_angle = this->angle;
+    this->angle             = skin_angle_rad;
+
+    std::unique_ptr<Fill> alt_skin_fill;
+    if (skin_pattern != ipRectilinear && skin_pattern != ipZigZag &&
+        skin_pattern != ipCrossZag && skin_pattern != ipLockedZag) {
+        alt_skin_fill.reset(Fill::new_from_type(skin_pattern));
+        if (alt_skin_fill) {
+            alt_skin_fill->layer_id            = this->layer_id;
+            alt_skin_fill->z                   = this->z;
+            alt_skin_fill->spacing             = this->spacing;
+            alt_skin_fill->overlap             = this->overlap;
+            alt_skin_fill->angle               = skin_angle_rad;
+            alt_skin_fill->bounding_box        = this->bounding_box;
+            alt_skin_fill->link_max_length     = this->link_max_length;
+            alt_skin_fill->loop_clipping       = this->loop_clipping;
+            alt_skin_fill->print_config        = this->print_config;
+            alt_skin_fill->print_object_config = this->print_object_config;
+        }
+    }
+
     auto skin_density         = this->lock_param.skin_density_params.begin();
     while (skin_density != this->lock_param.skin_density_params.end()) {
         ExPolygons region_exp = union_safety_offset_ex(skin_density->second);
@@ -3888,11 +3956,17 @@ void FillLockedZag::fill_surface_locked_zag (const Surface *                    
         cross_params.density  = skin_density->first;
         for (ExPolygon &exp : exps) {
             cross_surface.expolygon       = exp;
-            Polylines cross_polylines_out = this->fill_surface(&cross_surface, cross_params);
+            Polylines cross_polylines_out;
+            if (alt_skin_fill)
+                cross_polylines_out = alt_skin_fill->fill_surface(&cross_surface, cross_params);
+            else
+                cross_polylines_out = this->fill_surface(&cross_surface, cross_params);
             skin_lines.insert(skin_lines.end(), cross_polylines_out.begin(), cross_polylines_out.end());
         }
         skin_density++;
     }
+    // LUGOWARE: 함수 끝나기 전 원래 각도 복구
+    this->angle = saved_skin_angle;
 
     generate_for_different_flow(this->lock_param.skin_flow_params, skin_lines);
 }
