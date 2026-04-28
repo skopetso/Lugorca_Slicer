@@ -2612,6 +2612,16 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloats { 70. });
 
+    // LUGOWARE: 슬로우다운 종료 후 속도가 100%로 복귀하는 ramp-up 거리. 5% 단계 분할.
+    def = this->add("filament_toolchange_slowdown_return_distance", coFloats);
+    def->label = L("Speed return distance");
+    def->tooltip = L("After toolchange slowdown ends, gradually ramp speed back to 100% over this distance in 5% steps. 0 = instant return.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->max = 200;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloats { 0. });
+
     def = this->add("filament_toolchange_slowdown_additional_temp", coFloats);
     def->label = L("Slowdown additional temperature");
     def->tooltip = L("");

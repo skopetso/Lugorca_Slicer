@@ -1427,6 +1427,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     // LUGOWARE: Toolchange slowdown
     ((ConfigOptionFloats,              filament_toolchange_slowdown_speed_ratio))
     ((ConfigOptionFloats,              filament_toolchange_slowdown_distance))
+    ((ConfigOptionFloats,              filament_toolchange_slowdown_return_distance))
     ((ConfigOptionFloats,              filament_toolchange_slowdown_additional_temp))
     // LUGOWARE: Additional prime
     ((ConfigOptionFloats,              filament_additional_prime))

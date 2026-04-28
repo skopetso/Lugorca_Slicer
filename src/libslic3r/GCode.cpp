@@ -7103,12 +7103,40 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                         m_toolchange_remaining_slowdown_dist -= line_length;
                         if (m_toolchange_remaining_slowdown_dist <= 0) {
                             m_toolchange_remaining_slowdown_dist = 0;
-                            // Restore original speed
-                            double restored_F = speed * 60;
-                            gcode += m_writer.set_speed(restored_F, "", comment);
+                            if (m_toolchange_return_step_distance > 0) {
+                                // Speed return ramp 시작 — 5% 단계로 점진 복귀
+                                int total_steps = (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size);
+                                if (total_steps < 1) total_steps = 1;
+                                m_toolchange_return_remaining = m_toolchange_return_step_distance * total_steps;
+                                m_toolchange_return_current_step = 1;
+                                double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                                if (cur_ratio > 1.0) cur_ratio = 1.0;
+                                m_toolchange_slowdown_speed_ratio = cur_ratio;
+                                gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                            } else {
+                                // 즉시 100% 복귀
+                                gcode += m_writer.set_speed(speed * 60, "", comment);
+                                m_toolchange_slowdown_speed_ratio = 1.0;
+                            }
                             // LUGOWARE: Restore original temperature
                             if (m_toolchange_slowdown_original_temp > 0)
                                 gcode += m_writer.set_temperature(m_toolchange_slowdown_original_temp, false);
+                        }
+                    } else if (m_toolchange_return_remaining > 0) {
+                        m_toolchange_return_remaining -= line_length;
+                        int target_step = (int)std::round((m_toolchange_return_step_distance * (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size) - m_toolchange_return_remaining) / m_toolchange_return_step_distance);
+                        if (target_step < 1) target_step = 1;
+                        if (target_step > m_toolchange_return_current_step) {
+                            m_toolchange_return_current_step = target_step;
+                            double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                            if (cur_ratio > 1.0) cur_ratio = 1.0;
+                            m_toolchange_slowdown_speed_ratio = cur_ratio;
+                            gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                        }
+                        if (m_toolchange_return_remaining <= 0) {
+                            m_toolchange_return_remaining = 0;
+                            m_toolchange_slowdown_speed_ratio = 1.0;
+                            gcode += m_writer.set_speed(speed * 60, "", comment);
                         }
                     }
                 }
@@ -7145,11 +7173,40 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                                 m_toolchange_remaining_slowdown_dist -= line_length;
                                 if (m_toolchange_remaining_slowdown_dist <= 0) {
                                     m_toolchange_remaining_slowdown_dist = 0;
-                                    double restored_F = speed * 60;
-                                    gcode += m_writer.set_speed(restored_F, "", comment);
+                                    if (m_toolchange_return_step_distance > 0) {
+                                        int total_steps = (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size);
+                                        if (total_steps < 1) total_steps = 1;
+                                        m_toolchange_return_remaining = m_toolchange_return_step_distance * total_steps;
+                                        m_toolchange_return_current_step = 1;
+                                        double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                                        if (cur_ratio > 1.0) cur_ratio = 1.0;
+                                        m_toolchange_slowdown_speed_ratio = cur_ratio;
+                                        gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                                    } else {
+                                        gcode += m_writer.set_speed(speed * 60, "", comment);
+                                        m_toolchange_slowdown_speed_ratio = 1.0;
+                                    }
                                     // LUGOWARE: Restore original temperature
                                     if (m_toolchange_slowdown_original_temp > 0)
                                         gcode += m_writer.set_temperature(m_toolchange_slowdown_original_temp, false);
+                                }
+                            } else if (m_toolchange_return_remaining > 0) {
+                                m_toolchange_return_remaining -= line_length;
+                                int total_steps = (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size);
+                                if (total_steps < 1) total_steps = 1;
+                                int target_step = (int)std::round((m_toolchange_return_step_distance * total_steps - m_toolchange_return_remaining) / m_toolchange_return_step_distance);
+                                if (target_step < 1) target_step = 1;
+                                if (target_step > m_toolchange_return_current_step) {
+                                    m_toolchange_return_current_step = target_step;
+                                    double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                                    if (cur_ratio > 1.0) cur_ratio = 1.0;
+                                    m_toolchange_slowdown_speed_ratio = cur_ratio;
+                                    gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                                }
+                                if (m_toolchange_return_remaining <= 0) {
+                                    m_toolchange_return_remaining = 0;
+                                    m_toolchange_slowdown_speed_ratio = 1.0;
+                                    gcode += m_writer.set_speed(speed * 60, "", comment);
                                 }
                             }
                         }
@@ -7182,11 +7239,40 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
                             m_toolchange_remaining_slowdown_dist -= arc_length;
                             if (m_toolchange_remaining_slowdown_dist <= 0) {
                                 m_toolchange_remaining_slowdown_dist = 0;
-                                double restored_F = speed * 60;
-                                gcode += m_writer.set_speed(restored_F, "", comment);
+                                if (m_toolchange_return_step_distance > 0) {
+                                    int total_steps = (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size);
+                                    if (total_steps < 1) total_steps = 1;
+                                    m_toolchange_return_remaining = m_toolchange_return_step_distance * total_steps;
+                                    m_toolchange_return_current_step = 1;
+                                    double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                                    if (cur_ratio > 1.0) cur_ratio = 1.0;
+                                    m_toolchange_slowdown_speed_ratio = cur_ratio;
+                                    gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                                } else {
+                                    gcode += m_writer.set_speed(speed * 60, "", comment);
+                                    m_toolchange_slowdown_speed_ratio = 1.0;
+                                }
                                 // LUGOWARE: Restore original temperature
                                 if (m_toolchange_slowdown_original_temp > 0)
                                     gcode += m_writer.set_temperature(m_toolchange_slowdown_original_temp, false);
+                            }
+                        } else if (m_toolchange_return_remaining > 0) {
+                            m_toolchange_return_remaining -= arc_length;
+                            int total_steps = (int)std::round((1.0 - m_toolchange_return_initial_ratio) / m_toolchange_return_step_size);
+                            if (total_steps < 1) total_steps = 1;
+                            int target_step = (int)std::round((m_toolchange_return_step_distance * total_steps - m_toolchange_return_remaining) / m_toolchange_return_step_distance);
+                            if (target_step < 1) target_step = 1;
+                            if (target_step > m_toolchange_return_current_step) {
+                                m_toolchange_return_current_step = target_step;
+                                double cur_ratio = m_toolchange_return_initial_ratio + m_toolchange_return_step_size * m_toolchange_return_current_step;
+                                if (cur_ratio > 1.0) cur_ratio = 1.0;
+                                m_toolchange_slowdown_speed_ratio = cur_ratio;
+                                gcode += m_writer.set_speed(speed * 60 * cur_ratio, "", comment);
+                            }
+                            if (m_toolchange_return_remaining <= 0) {
+                                m_toolchange_return_remaining = 0;
+                                m_toolchange_slowdown_speed_ratio = 1.0;
+                                gcode += m_writer.set_speed(speed * 60, "", comment);
                             }
                         }
                         break;
@@ -7931,6 +8017,18 @@ std::string GCode::set_extruder(unsigned int new_filament_id, double print_z, bo
             if (slowdown_ratio <= 0) slowdown_ratio = 50.;
             m_toolchange_remaining_slowdown_dist = slowdown_dist;
             m_toolchange_slowdown_speed_ratio = slowdown_ratio / 100.0;
+            // LUGOWARE: Speed return ramp parameters
+            double return_dist = m_config.filament_toolchange_slowdown_return_distance.get_at(new_filament_id);
+            if (return_dist > 0) {
+                int total_steps = (int)std::round((1.0 - m_toolchange_slowdown_speed_ratio) / m_toolchange_return_step_size);
+                if (total_steps < 1) total_steps = 1;
+                m_toolchange_return_step_distance = return_dist / total_steps;
+            } else {
+                m_toolchange_return_step_distance = 0.;
+            }
+            m_toolchange_return_initial_ratio = m_toolchange_slowdown_speed_ratio;
+            m_toolchange_return_remaining = 0.;          // 슬로우다운 종료 후 활성화
+            m_toolchange_return_current_step = 0;
             // LUGOWARE: Set temperature during slowdown (+additional_temp)
             int additional_temp = (int)m_config.filament_toolchange_slowdown_additional_temp.get_at(new_filament_id);
             int base_temp = this->on_first_layer()
@@ -8191,6 +8289,18 @@ std::string GCode::set_extruder(unsigned int new_filament_id, double print_z, bo
         if (slowdown_ratio <= 0) slowdown_ratio = 50.;
         m_toolchange_remaining_slowdown_dist = slowdown_dist;
         m_toolchange_slowdown_speed_ratio = slowdown_ratio / 100.0;
+        // LUGOWARE: Speed return ramp parameters
+        double return_dist = m_config.filament_toolchange_slowdown_return_distance.get_at(new_filament_id);
+        if (return_dist > 0) {
+            int total_steps = (int)std::round((1.0 - m_toolchange_slowdown_speed_ratio) / m_toolchange_return_step_size);
+            if (total_steps < 1) total_steps = 1;
+            m_toolchange_return_step_distance = return_dist / total_steps;
+        } else {
+            m_toolchange_return_step_distance = 0.;
+        }
+        m_toolchange_return_initial_ratio = m_toolchange_slowdown_speed_ratio;
+        m_toolchange_return_remaining = 0.;
+        m_toolchange_return_current_step = 0;
         // LUGOWARE: Set temperature during slowdown (+additional_temp)
         int additional_temp = (int)m_config.filament_toolchange_slowdown_additional_temp.get_at(new_filament_id);
         int base_temp = this->on_first_layer()
