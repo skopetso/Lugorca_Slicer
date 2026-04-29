@@ -6075,6 +6075,13 @@ std::string GCode::extrude_entity(const ExtrusionEntity &entity, std::string des
         return this->extrude_multi_path(*multipath, description, speed);
     else if (const ExtrusionLoop* loop = dynamic_cast<const ExtrusionLoop*>(&entity))
         return this->extrude_loop(*loop, description, speed, region_perimeters);
+    else if (const ExtrusionEntityCollection* eec = dynamic_cast<const ExtrusionEntityCollection*>(&entity)) {
+        // LUGOWARE: 중첩된 ExtrusionEntityCollection 재귀 처리 (ironing 등)
+        std::string gcode;
+        for (const ExtrusionEntity* sub : eec->entities)
+            if (sub) gcode += this->extrude_entity(*sub, description, speed, region_perimeters);
+        return gcode;
+    }
     else
         throw Slic3r::InvalidArgument("Invalid argument supplied to extrude()");
     return "";
