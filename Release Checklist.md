@@ -7,7 +7,7 @@ type: feedback
 # 릴리즈 규칙 (행님 지시)
 
 1. **개발 포터블에서 검증 완료된 상태만 릴리즈한다. 수정과 릴리즈를 동시에 진행하지 않는다.**
-2. **릴리즈 시 GitHub에 푸시하고 Windows/macOS/Linux 3종 동시 빌드한다.**
+2. **릴리즈 시 GitHub에 푸시하고 Windows 설치/Windows 포터블/macOS/Linux 4종을 동시 빌드한다.**
 3. **설치파일 이름은 반드시 `Lugorca_slicer` + 버전정보 형식으로 만든다.** (예: `Lugorca_slicer_V2.3.231_Windows.exe`)
 4. **릴리즈 실행 전 내용을 행님에게 공유하고 승인받은 후 제작한다.**
 
@@ -17,11 +17,16 @@ type: feedback
 
 ## 빌드 전
 - [ ] cmake configure 절대 돌리지 말 것 (`cmake --build`만 사용)
+- [ ] `git rev-list --left-right --count origin/main...HEAD`로 원격/로컬 divergence 확인
+  - 원격의 Lugorca 이름 정리 커밋을 빼고 로컬 ahead 커밋만 배포하지 말 것
 - [ ] version.inc 변경은 기능 확정 후 마지막에 한 번만 (거의 전체 리빌드 유발)
 - [ ] 메모리 부족 대비: `-m:2` 사용, 안 되면 `-m:1`
 - [ ] 슬라이서 프로세스 종료 확인 (`taskkill //IM orca-slicer.exe //F`)
 
 ## 프리셋 수정 시 절대 주의
+- [ ] `resources/profiles/LUGOWARE/**` 변경 시 `resources/profiles/LUGOWARE.json`의 `"version"` bump 필수
+  - 기존 사용자는 AppData system 캐시를 우선 로드
+  - 벤더 버전이 올라갈 때만 resources → AppData system 복사 발생
 - [ ] **LUGOWARE.json (벤더 파일)이 참조하는 프리셋 절대 삭제 금지**
   - `fdm_process_lugoware_common.json` 등 벤더 JSON이 참조하는 파일 삭제하면 LUGOWARE 벤더 전체 로딩 실패
   - 삭제 전 반드시 `LUGOWARE.json`의 `process_list`, `filament_list` 확인
@@ -40,13 +45,20 @@ type: feedback
 - [ ] 포터블에서 실행 확인 (프린터 프리셋 보이는지)
 - [ ] 업로드 & 프린팅 테스트 (OctoPrint 연결)
 - [ ] 슬라이싱 테스트 (기본 모델 하나)
+- [ ] Filament Calibration 리소스 추적 확인:
+  - `git ls-files resources/calib/filament_calibration`
+  - `filament calibration.stl`, `filament calibration_foam.stl` 둘 다 보여야 함
 
 ## 릴리즈 (포터블 검증 완료 후에만)
 - [ ] 행님에게 릴리즈 내용 공유 + 승인
+- [ ] i18n 카탈로그명 확인
+  - `SLIC3R_APP_KEY`와 생성되는 `.mo` 파일명 불일치 시 번역 로드 실패 가능
+- [ ] `installer/lugoware_orca.nsi`는 legacy/manual only
+  - 사용할 경우 version/product/exe/outfile 이름을 현재 Lugorca 정책과 먼저 맞출 것
 - [ ] 설치파일 빌드: `cmake --build . --config Release --target package -- -m:2`
 - [ ] 설치파일 이름 확인: `Lugorca_slicer_V{버전}_{플랫폼}` 형식
 - [ ] 설치파일 설치 테스트 (실제 설치 되는지)
-- [ ] GitHub 푸시 + Windows/macOS/Linux 3종 릴리즈
+- [ ] GitHub 푸시 + Windows 설치/Windows 포터블/macOS/Linux 4종 릴리즈
 - [ ] 릴리즈 노트에 변경사항 명시
 
 ---

@@ -7797,7 +7797,43 @@ LiftType GCode::to_lift_type(ZHopType z_hop_types) {
 
 bool GCode::needs_retraction(const Polyline &travel, ExtrusionRole role, LiftType& lift_type)
 {
-    if (travel.length() < scale_(FILAMENT_CONFIG(retraction_minimum_travel))) {
+    bool travels_across_model_boundary = false;
+    if (m_layer != nullptr && dynamic_cast<const SupportLayer*>(m_layer) == nullptr && travel.points.size() >= 2) {
+        BoundingBox travel_bbox = get_extents(travel);
+        travel_bbox.offset(SCALED_EPSILON);
+        const int from_lslice_idx = find_lslice_index(travel.points.front(), *m_layer);
+        const int to_lslice_idx   = find_lslice_index(travel.points.back(), *m_layer);
+
+        const auto lslice_overlaps_travel = [this, &travel_bbox](int lslice_idx) {
+            if (lslice_idx < 0 || lslice_idx >= (int)m_layer->lslices.size())
+                return false;
+            if (lslice_idx < (int)m_layer->lslices_bboxes.size()) {
+                BoundingBox lslice_bbox = m_layer->lslices_bboxes[lslice_idx];
+                lslice_bbox.offset(SCALED_EPSILON);
+                return lslice_bbox.overlap(travel_bbox);
+            }
+            return get_extents(m_layer->lslices[lslice_idx]).overlap(travel_bbox);
+        };
+
+        const auto travel_inside_lslice = [this, &travel, &lslice_overlaps_travel](int lslice_idx) {
+            return lslice_overlaps_travel(lslice_idx) && diff_pl(travel, m_layer->lslices[lslice_idx]).empty();
+        };
+
+        if (from_lslice_idx >= 0 && to_lslice_idx >= 0) {
+            travels_across_model_boundary = from_lslice_idx != to_lslice_idx || !travel_inside_lslice(from_lslice_idx);
+        } else if (from_lslice_idx >= 0 || to_lslice_idx >= 0) {
+            travels_across_model_boundary = true;
+        } else {
+            for (int i = 0; i < (int)m_layer->lslices.size(); ++i) {
+                if (lslice_overlaps_travel(i) && !intersection_pl(travel, m_layer->lslices[i]).empty()) {
+                    travels_across_model_boundary = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!travels_across_model_boundary && travel.length() < scale_(FILAMENT_CONFIG(retraction_minimum_travel))) {
         // skip retraction if the move is shorter than the configured threshold
         return false;
     }
@@ -7872,6 +7908,18 @@ bool GCode::needs_retraction(const Polyline &travel, ExtrusionRole role, LiftTyp
         clipped_travel.points.back() = clipped_travel.points.front()+(clipped_travel.points.back() - clipped_travel.points.front()) * (travel_len_thresh / clipped_travel.length());
     //BBS: translate to current plate coordinate system
     clipped_travel.translate(Point::new_scale(double(m_origin.x() - m_writer.get_xy_offset().x()), double(m_origin.y() - m_writer.get_xy_offset().y())));
+
+    // LUGOWARE: the distance threshold only suppresses travel fully contained in a model island.
+    // Crossing an island boundary must retract so z-hop can protect the move.
+    if (travels_across_model_boundary) {
+        if (ZHopType(FILAMENT_CONFIG(z_hop_types)) == ZHopType::zhtAuto) {
+            lift_type = is_through_overhang(clipped_travel) ? LiftType::SpiralLift : LiftType::SlopeLift;
+        }
+        else {
+            lift_type = to_lift_type(ZHopType(FILAMENT_CONFIG(z_hop_types)));
+        }
+        return true;
+    }
 
     //BBS: force to retract when leave from external perimeter for a long travel
     //Better way is judging whether the travel move direction is same with last extrusion move.
