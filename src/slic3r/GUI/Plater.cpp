@@ -9312,7 +9312,7 @@ void Plater::priv::on_select_preset(wxCommandEvent &evt)
                     lugoware_state.fuzzy_backup[mv->id()] = mv->fuzzy_skin_facets.get_data();
             }
         }
-        lugoware_state.valid = true;
+        lugoware_state.valid = !model.objects.empty();
     }
 
     // BBS:Save the plate parameters before switching
